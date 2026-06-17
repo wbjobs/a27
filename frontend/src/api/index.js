@@ -69,4 +69,57 @@ export const backtestApi = {
   quickAnalysis: (factorValues) => api.post('/backtest/quick-analysis', { factor_values: factorValues })
 }
 
+export const portfolioApi = {
+  listModels: () => api.get('/portfolio/models'),
+  optimize: (datasetName, factors, model = 'mean_variance', riskFreeRate = 0.03, targetReturn = null, minWeight = 0, maxWeight = 1) =>
+    api.post('/portfolio/optimize', {
+      dataset_name: datasetName,
+      factors,
+      model,
+      risk_free_rate: riskFreeRate,
+      target_return: targetReturn,
+      min_weight: minWeight,
+      max_weight: maxWeight
+    })
+}
+
+export const shapApi = {
+  analyze: (datasetName, factorName, factorValues, nSamples = 100, targetPeriod = 5) =>
+    api.post('/shap/analyze', {
+      dataset_name: datasetName,
+      factor_name: factorName,
+      factor_values: factorValues,
+      n_samples: nSamples,
+      target_period: targetPeriod
+    }),
+  generateReport: (factorName, shapResult, backtestResult) =>
+    api.post('/shap/report', {
+      factor_name: factorName,
+      shap_result: shapResult,
+      backtest_result: backtestResult
+    }, {
+      responseType: 'blob'
+    })
+}
+
+export const templateApi = {
+  listTemplates: (params) => api.get('/templates', { params }),
+  getCategories: () => api.get('/templates/categories'),
+  getTemplate: (id) => api.get(`/templates/${id}`),
+  publishTemplate: (data) => api.post('/templates/publish', data),
+  forkTemplate: (id, authorName, newName) => api.post(`/templates/${id}/fork`, null, { params: { author_name: authorName, new_name: newName } }),
+  likeTemplate: (id) => api.post(`/templates/${id}/like`),
+  deleteTemplate: (id) => api.delete(`/templates/${id}`),
+  applyTemplate: (id) => api.post(`/templates/${id}/apply`)
+}
+
+export const wsApi = {
+  buildRealtimeUrl: (datasetName, workflow, pushInterval = 1.0) => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = window.location.hostname + ':8000'
+    const workflowStr = encodeURIComponent(JSON.stringify(workflow))
+    return `${protocol}//${host}/ws/realtime?dataset_name=${encodeURIComponent(datasetName)}&workflow=${workflowStr}&push_interval=${pushInterval}`
+  }
+}
+
 export default api

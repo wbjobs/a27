@@ -153,3 +153,159 @@ class BacktestResult(BaseModel):
     long_short_return: Optional[Dict[str, Any]] = None
     turnover_stats: Optional[TurnoverStats] = None
     heatmap_data: Optional[List[Dict[str, Any]]] = None
+
+
+# ============================================
+# 实时行情 WebSocket 模型
+# ============================================
+class RealtimeBar(BaseModel):
+    ts_code: str
+    trade_date: date
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    timestamp: float
+
+
+class RealtimeFactorUpdate(BaseModel):
+    ts_code: str
+    trade_date: date
+    factor_value: float
+    previous_value: float
+    change_pct: float
+
+
+class WebsocketMessage(BaseModel):
+    type: str
+    data: Dict[str, Any]
+    timestamp: float
+
+
+# ============================================
+# 组合优化模型
+# ============================================
+class PortfolioFactorInput(BaseModel):
+    name: str
+    factor_values: List[Dict[str, Any]]
+
+
+class OptimizationModel(str, Enum):
+    MEAN_VARIANCE = "mean_variance"
+    RISK_PARITY = "risk_parity"
+    EQUAL_WEIGHT = "equal_weight"
+    MIN_VARIANCE = "min_variance"
+    MAX_SHARPE = "max_sharpe"
+
+
+class PortfolioRequest(BaseModel):
+    dataset_name: str
+    factors: List[PortfolioFactorInput]
+    model: OptimizationModel = OptimizationModel.MEAN_VARIANCE
+    risk_free_rate: float = Field(default=0.03, ge=0, le=0.2)
+    target_return: Optional[float] = None
+    min_weight: float = Field(default=0.0, ge=0.0, le=1.0)
+    max_weight: float = Field(default=1.0, ge=0.0, le=1.0)
+    rebalance_freq: str = "monthly"
+
+
+class EfficientFrontierPoint(BaseModel):
+    expected_return: float
+    expected_volatility: float
+    sharpe_ratio: float
+    weights: Dict[str, float]
+
+
+class PortfolioResult(BaseModel):
+    success: bool
+    message: str
+    weights: Dict[str, float]
+    expected_return: float
+    expected_volatility: float
+    sharpe_ratio: float
+    efficient_frontier: Optional[List[EfficientFrontierPoint]] = None
+    monte_carlo_points: Optional[List[Dict[str, Any]]] = None
+    risk_contributions: Optional[Dict[str, float]] = None
+
+
+# ============================================
+# SHAP 因子解释模型
+# ============================================
+class ShapRequest(BaseModel):
+    dataset_name: str
+    factor_name: str
+    factor_values: List[Dict[str, Any]]
+    n_samples: int = Field(default=100, ge=10, le=5000)
+    target_period: int = Field(default=5, ge=1, le=60)
+
+
+class FeatureContribution(BaseModel):
+    feature: str
+    mean_shap_value: float
+    mean_abs_shap_value: float
+    importance_rank: int
+
+
+class ShapResult(BaseModel):
+    success: bool
+    message: str
+    feature_contributions: List[FeatureContribution]
+    shap_values: List[Dict[str, Any]]
+    base_value: float
+    summary_plot_data: List[Dict[str, Any]]
+    force_plot_data: List[Dict[str, Any]]
+
+
+# ============================================
+# 模板市场模型
+# ============================================
+class TemplateAuthor(BaseModel):
+    name: str
+    avatar: Optional[str] = None
+    profile: Optional[str] = None
+
+
+class FactorTemplate(BaseModel):
+    template_id: Optional[str] = None
+    name: str
+    description: str
+    category: str
+    tags: List[str] = []
+    author: TemplateAuthor
+    workflow: FactorWorkflow
+    factor_stats: Optional[Dict[str, Any]] = None
+    backtest_result: Optional[Dict[str, Any]] = None
+    likes: int = 0
+    forks: int = 0
+    views: int = 0
+    is_public: bool = True
+    created_at: Optional[float] = None
+    updated_at: Optional[float] = None
+
+
+class TemplatePublishRequest(BaseModel):
+    name: str
+    description: str
+    category: str
+    tags: List[str] = []
+    author_name: str
+    workflow: FactorWorkflow
+    factor_stats: Optional[Dict[str, Any]] = None
+    backtest_result: Optional[Dict[str, Any]] = None
+    is_public: bool = True
+
+
+class TemplateListResponse(BaseModel):
+    success: bool
+    message: str
+    total: int
+    templates: List[FactorTemplate]
+
+
+class TemplateForkResponse(BaseModel):
+    success: bool
+    message: str
+    new_template_id: str
+    workflow: FactorWorkflow
+

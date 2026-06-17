@@ -7,6 +7,10 @@ from app.core.duckdb_engine import duckdb_engine
 from app.api.data_router import router as data_router
 from app.api.factor_router import router as factor_router
 from app.api.backtest_router import router as backtest_router
+from app.api.portfolio_router import router as portfolio_router
+from app.api.shap_router import router as shap_router
+from app.api.template_router import router as template_router
+from app.api.ws_router import router as ws_router
 
 
 @asynccontextmanager
@@ -33,6 +37,10 @@ app.add_middleware(
 app.include_router(data_router)
 app.include_router(factor_router)
 app.include_router(backtest_router)
+app.include_router(portfolio_router)
+app.include_router(shap_router)
+app.include_router(template_router)
+app.include_router(ws_router, prefix="/ws")
 
 
 @app.get("/")
