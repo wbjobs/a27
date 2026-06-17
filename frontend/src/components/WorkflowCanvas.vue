@@ -85,10 +85,11 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, defineAsyncComponent } from 'vue'
 import { ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 import { useWorkflowStore } from '../stores/workflow'
-import FactorNode from './FactorNode.vue'
+
+const FactorNode = defineAsyncComponent(() => import('./FactorNode.vue'))
 
 const workflowStore = useWorkflowStore()
 const canvasRef = ref(null)

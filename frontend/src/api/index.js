@@ -45,15 +45,23 @@ export const dataApi = {
 export const factorApi = {
   listOperators: () => api.get('/factor/operators'),
   getOperator: (id) => api.get(`/factor/operators/${id}`),
-  computeFactor: (workflow, datasetName, stockCodes = null, startDate = null, endDate = null) =>
+  computeFactor: (workflow, datasetName, stockCodes = null, startDate = null, endDate = null, forwardValidation = false) =>
     api.post('/factor/compute', {
       workflow,
       dataset_name: datasetName,
       stock_codes: stockCodes,
       start_date: startDate,
-      end_date: endDate
+      end_date: endDate,
+      forward_validation: forwardValidation
     }),
-  validateWorkflow: (workflow) => api.post('/factor/validate-workflow', workflow)
+  validateWorkflow: (workflow) => api.post('/factor/validate-workflow', workflow),
+  analyzeCorrelation: (factorValuesList, datasetName, vifThreshold = 10, corrThreshold = 0.7) =>
+    api.post('/factor/correlation', {
+      factor_values_list: factorValuesList,
+      dataset_name: datasetName,
+      vif_threshold: vifThreshold,
+      corr_threshold: corrThreshold
+    })
 }
 
 export const backtestApi = {

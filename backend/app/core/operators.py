@@ -44,7 +44,11 @@ class MovingAverage(FactorOperatorBase):
     params = [
         {"id": "period", "name": "周期", "type": "int", "default": 20, "min": 1, "max": 500}
     ]
-    
+    lookback = 1
+
+    def get_lookback(self, params: Dict[str, Any]) -> int:
+        return int(params.get("period", 20))
+
     def compute(self, inputs: Dict[str, pd.Series], params: Dict[str, Any]) -> pd.Series:
         price = inputs["price"]
         period = int(params.get("period", 20))
@@ -61,7 +65,11 @@ class ExponentialMovingAverage(FactorOperatorBase):
     params = [
         {"id": "period", "name": "周期", "type": "int", "default": 20, "min": 1, "max": 500}
     ]
-    
+    lookback = 1
+
+    def get_lookback(self, params: Dict[str, Any]) -> int:
+        return int(params.get("period", 20)) * 3
+
     def compute(self, inputs: Dict[str, pd.Series], params: Dict[str, Any]) -> pd.Series:
         price = inputs["price"]
         period = int(params.get("period", 20))
@@ -78,7 +86,11 @@ class RelativeStrengthIndex(FactorOperatorBase):
     params = [
         {"id": "period", "name": "周期", "type": "int", "default": 14, "min": 2, "max": 100}
     ]
-    
+    lookback = 1
+
+    def get_lookback(self, params: Dict[str, Any]) -> int:
+        return int(params.get("period", 14)) + 1
+
     def compute(self, inputs: Dict[str, pd.Series], params: Dict[str, Any]) -> pd.Series:
         price = inputs["price"]
         period = int(params.get("period", 14))
@@ -109,7 +121,11 @@ class BollingerBands(FactorOperatorBase):
         {"id": "period", "name": "周期", "type": "int", "default": 20, "min": 2, "max": 500},
         {"id": "std_dev", "name": "标准差倍数", "type": "float", "default": 2.0, "min": 0.1, "max": 5.0}
     ]
-    
+    lookback = 1
+
+    def get_lookback(self, params: Dict[str, Any]) -> int:
+        return int(params.get("period", 20))
+
     def compute(self, inputs: Dict[str, pd.Series], params: Dict[str, Any]) -> pd.Series:
         price = inputs["price"]
         period = int(params.get("period", 20))
@@ -137,7 +153,11 @@ class Momentum(FactorOperatorBase):
         {"id": "method", "name": "计算方式", "type": "select", "default": "ratio",
          "options": [{"label": "比值", "value": "ratio"}, {"label": "差值", "value": "diff"}, {"label": "收益率", "value": "return"}]}
     ]
-    
+    lookback = 1
+
+    def get_lookback(self, params: Dict[str, Any]) -> int:
+        return int(params.get("period", 20))
+
     def compute(self, inputs: Dict[str, pd.Series], params: Dict[str, Any]) -> pd.Series:
         price = inputs["price"]
         period = int(params.get("period", 20))
@@ -168,7 +188,13 @@ class MACD(FactorOperatorBase):
         {"id": "slow", "name": "慢线周期", "type": "int", "default": 26, "min": 2, "max": 500},
         {"id": "signal", "name": "信号线周期", "type": "int", "default": 9, "min": 2, "max": 100}
     ]
-    
+    lookback = 1
+
+    def get_lookback(self, params: Dict[str, Any]) -> int:
+        slow = int(params.get("slow", 26))
+        signal = int(params.get("signal", 9))
+        return slow * 3 + signal
+
     def compute(self, inputs: Dict[str, pd.Series], params: Dict[str, Any]) -> pd.Series:
         price = inputs["price"]
         fast = int(params.get("fast", 12))
@@ -193,7 +219,11 @@ class VolumeRatio(FactorOperatorBase):
     params = [
         {"id": "period", "name": "平均周期", "type": "int", "default": 5, "min": 1, "max": 200}
     ]
-    
+    lookback = 1
+
+    def get_lookback(self, params: Dict[str, Any]) -> int:
+        return int(params.get("period", 5))
+
     def compute(self, inputs: Dict[str, pd.Series], params: Dict[str, Any]) -> pd.Series:
         volume = inputs["volume"]
         period = int(params.get("period", 5))
@@ -211,7 +241,11 @@ class PriceChange(FactorOperatorBase):
     params = [
         {"id": "period", "name": "周期", "type": "int", "default": 1, "min": 1, "max": 252}
     ]
-    
+    lookback = 1
+
+    def get_lookback(self, params: Dict[str, Any]) -> int:
+        return int(params.get("period", 1))
+
     def compute(self, inputs: Dict[str, pd.Series], params: Dict[str, Any]) -> pd.Series:
         price = inputs["price"]
         period = int(params.get("period", 1))
@@ -229,7 +263,11 @@ class Volatility(FactorOperatorBase):
         {"id": "period", "name": "周期", "type": "int", "default": 20, "min": 2, "max": 500},
         {"id": "annualize", "name": "年化", "type": "boolean", "default": True}
     ]
-    
+    lookback = 1
+
+    def get_lookback(self, params: Dict[str, Any]) -> int:
+        return int(params.get("period", 20)) + 1
+
     def compute(self, inputs: Dict[str, pd.Series], params: Dict[str, Any]) -> pd.Series:
         price = inputs["price"]
         period = int(params.get("period", 20))
@@ -260,7 +298,11 @@ class ArithmeticOperator(FactorOperatorBase):
              {"label": "除法 (/)", "value": "div"}
          ]}
     ]
-    
+    lookback = 0
+
+    def get_lookback(self, params: Dict[str, Any]) -> int:
+        return 0
+
     def compute(self, inputs: Dict[str, pd.Series], params: Dict[str, Any]) -> pd.Series:
         left = inputs["left"]
         right = inputs["right"]
@@ -291,7 +333,11 @@ class RankNormalize(FactorOperatorBase):
              {"label": "Rank", "value": "rank"}
          ]}
     ]
-    
+    lookback = 0
+
+    def get_lookback(self, params: Dict[str, Any]) -> int:
+        return 0
+
     def compute(self, inputs: Dict[str, pd.Series], params: Dict[str, Any]) -> pd.Series:
         factor = inputs["factor"]
         method = params.get("method", "minmax")

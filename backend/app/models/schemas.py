@@ -58,6 +58,7 @@ class FactorOperator(BaseModel):
     inputs: List[Dict[str, Any]]
     outputs: List[Dict[str, Any]]
     params: List[Dict[str, Any]]
+    lookback: int = 0
 
 
 class FactorNode(BaseModel):
@@ -80,6 +81,7 @@ class FactorComputeRequest(BaseModel):
     stock_codes: Optional[List[str]] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
+    forward_validation: bool = Field(default=False, description="启用严格前向验证模式，杜绝未来函数")
 
 
 class FactorComputeResponse(BaseModel):
@@ -87,6 +89,24 @@ class FactorComputeResponse(BaseModel):
     message: str
     factor_values: Optional[List[Dict[str, Any]]] = None
     stats: Optional[Dict[str, Any]] = None
+    forward_validation: Optional[Dict[str, Any]] = None
+
+
+class FactorCorrelationRequest(BaseModel):
+    factor_values_list: List[Dict[str, Any]] = Field(..., description="多个因子值列表，每个包含name和values")
+    dataset_name: str
+    vif_threshold: float = Field(default=10.0, ge=1.0, le=100.0, description="VIF阈值，超过此值认为存在严重共线性")
+    corr_threshold: float = Field(default=0.7, ge=0.0, le=1.0, description="相关系数阈值，超过此值认为高度相关")
+
+
+class FactorCorrelationResult(BaseModel):
+    success: bool
+    message: str
+    correlation_matrix: Optional[List[Dict[str, Any]]] = None
+    vif_values: Optional[List[Dict[str, Any]]] = None
+    collinear_pairs: Optional[List[Dict[str, Any]]] = None
+    removed_factors: Optional[List[str]] = None
+    kept_factors: Optional[List[str]] = None
 
 
 class BacktestRequest(BaseModel):

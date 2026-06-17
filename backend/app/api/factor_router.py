@@ -5,8 +5,10 @@ from datetime import date
 from app.core.operators import OperatorRegistry
 from app.core.factor_engine import factor_executor
 from app.core.cache import cache_manager, cached
+from app.core.correlation_engine import factor_correlation_analyzer
 from app.models.schemas import (
-    FactorComputeRequest, FactorComputeResponse, FactorOperator
+    FactorComputeRequest, FactorComputeResponse, FactorOperator,
+    FactorCorrelationRequest, FactorCorrelationResult
 )
 
 router = APIRouter(prefix="/api/factor", tags=["因子计算"])
@@ -50,13 +52,17 @@ def compute_factor(request: FactorComputeRequest):
             dataset_name=request.dataset_name,
             stock_codes=request.stock_codes,
             start_date=request.start_date,
-            end_date=request.end_date
+            end_date=request.end_date,
+            forward_validation=request.forward_validation
         )
         
         result = {
             "factor_values": factor_values,
             "stats": stats
         }
+        
+        if request.forward_validation and "forward_validation" in stats:
+            result["forward_validation"] = stats.pop("forward_validation")
         cache_manager.set(cache_key, result, ttl=7200)
         
         return FactorComputeResponse(
@@ -110,3 +116,18 @@ def validate_workflow(workflow: Dict[str, Any]):
         return {"valid": False, "message": str(e)}
     except Exception as e:
         return {"valid": False, "message": f"验证失败: {str(e)}"}
+
+
+@router.post("/correlation", response_model=FactorCorrelationResult)
+def analyze_factor_correlation(request: FactorCorrelationRequest):
+    try:
+        result = factor_correlation_analyzer.analyze(
+            factor_values_list=request.factor_values_list,
+            vif_threshold=request.vif_threshold,
+            corr_threshold=request.corr_threshold
+        )
+        return FactorCorrelationResult(**result)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"相关性分析失败: {str(e)}")

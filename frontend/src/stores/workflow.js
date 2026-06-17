@@ -284,6 +284,7 @@ export const useWorkflowStore = defineStore('workflow', {
       this.factorStats = null
       this.backtestResult = null
       this.nextNodeId = 1
+      this.syncToUrl()
     },
 
     setFactorResult(values, stats) {
@@ -297,6 +298,101 @@ export const useWorkflowStore = defineStore('workflow', {
 
     setLoading(loading) {
       this.isLoading = loading
+    },
+
+    syncToUrl() {
+      try {
+        if (this.nodes.length === 0) {
+          const currentUrl = new URL(window.location.href)
+          currentUrl.hash = ''
+          window.history.replaceState(null, '', currentUrl.toString())
+          return
+        }
+
+        const state = {
+          n: this.nodes.map(nd => ({
+            id: nd.id,
+            oid: nd.operator_id,
+            x: Math.round(nd.x),
+            y: Math.round(nd.y),
+            p: nd.params
+          })),
+          e: this.edges.map(ed => ({
+            s: ed.source,
+            si: ed.source_output,
+            t: ed.target,
+            ti: ed.target_input
+          })),
+          o: this.outputNodeId
+        }
+
+        const json = JSON.stringify(state)
+        const encoded = btoa(unescape(encodeURIComponent(json)))
+        const currentUrl = new URL(window.location.href)
+        currentUrl.hash = 'wf=' + encoded
+        window.history.replaceState(null, '', currentUrl.toString())
+      } catch (err) {
+        console.warn('Failed to sync workflow to URL:', err)
+      }
+    },
+
+    loadFromUrl() {
+      try {
+        const hash = window.location.hash
+        if (!hash || !hash.startsWith('#wf=')) return false
+
+        const encoded = hash.slice(4)
+        const json = decodeURIComponent(escape(atob(encoded)))
+        const state = JSON.parse(json)
+
+        if (!state.n || !Array.isArray(state.n)) return false
+
+        this.nodes = state.n.map(nd => {
+          const op = this.operators.find(o => o.id === nd.oid)
+          const inputs = {}
+          if (op) {
+            op.inputs.forEach(inp => {
+              const inpId = inp.id.toLowerCase()
+              if (inpId.includes('price') || inpId.includes('factor') || inpId === 'left' || inpId === 'right') {
+                inputs[inp.id] = { type: 'market_data', field: 'close' }
+              } else if (inpId.includes('vol')) {
+                inputs[inp.id] = { type: 'market_data', field: 'volume' }
+              }
+            })
+          }
+          return {
+            id: nd.id,
+            operator_id: nd.oid,
+            name: op?.name || nd.oid,
+            category: op?.category || 'basic',
+            x: nd.x,
+            y: nd.y,
+            params: nd.p || {},
+            inputs
+          }
+        })
+
+        this.edges = (state.e || []).map((ed, i) => ({
+          id: `edge_url_${i}`,
+          source: ed.s,
+          source_output: ed.si,
+          target: ed.t,
+          target_input: ed.ti
+        }))
+
+        this.outputNodeId = state.o || null
+        this.nextNodeId = Math.max(...this.nodes.map(n => parseInt(n.id.split('_')[1]) || 0), 0) + 1
+        this.rebuildNodeInputs()
+        return true
+      } catch (err) {
+        console.warn('Failed to load workflow from URL:', err)
+        return false
+      }
+    },
+
+    getShareUrl() {
+      this.syncToUrl()
+      return window.location.href
     }
   }
 })

@@ -36,6 +36,7 @@
         <el-button :icon="Delete" @click="clearWorkflow">清空</el-button>
         <el-button type="success" :icon="Play" :loading="isComputing" @click="computeFactor">计算因子</el-button>
         <el-button type="warning" :icon="Histogram" :loading="isBacktesting" @click="runBacktest" :disabled="!workflowStore.factorResult">一键回测</el-button>
+        <el-button :icon="Share" @click="shareWorkflow">分享</el-button>
       </div>
     </div>
 
@@ -67,6 +68,11 @@
             <p>• 选择数据集后点击「计算因子」</p>
             <p>• 点击节点头部的★设为输出节点</p>
           </div>
+          <div class="section-title mt-md">前向验证</div>
+          <el-switch v-model="forwardValidation" active-text="严格模式" inactive-text="普通模式" />
+          <div class="text-muted" style="margin-top: 8px; font-size: 11px;">
+            开启后每个计算时点只使用该时点之前数据，杜绝未来函数
+          </div>
         </div>
       </div>
     </div>
@@ -96,7 +102,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { DataLine, MagicStick, Upload, Delete, Play, Histogram } from '@element-plus/icons-vue'
+import { DataLine, MagicStick, Upload, Delete, Play, Histogram, Share } from '@element-plus/icons-vue'
 import { useWorkflowStore } from './stores/workflow'
 import { dataApi, factorApi, backtestApi } from './api'
 import OperatorPalette from './components/OperatorPalette.vue'
@@ -119,6 +125,7 @@ const sampleParams = ref({
   nDays: 252,
   name: ''
 })
+const forwardValidation = ref(false)
 
 const isDatasetSelected = computed(() => !!selectedDataset.value)
 
@@ -135,6 +142,8 @@ onMounted(async () => {
       selectedDataset.value = workflowStore.datasets[0].name
       workflowStore.setCurrentDataset(selectedDataset.value)
     }
+
+    workflowStore.loadFromUrl()
   } catch (e) {
     ElMessage.error('初始化失败: ' + e.message)
   }
@@ -213,11 +222,16 @@ async function computeFactor() {
     const res = await factorApi.computeFactor(
       wf,
       selectedDataset.value,
-      null, null, null
+      null, null, null,
+      forwardValidation.value
     )
     if (res.success) {
       ElMessage.success(res.message)
       workflowStore.setFactorResult(res.factor_values, res.stats)
+      if (res.forward_validation) {
+        ElMessage.info(res.forward_validation.message)
+      }
+      workflowStore.syncToUrl()
     } else {
       ElMessage.error(res.message || '计算失败')
     }
@@ -265,5 +279,18 @@ function openResultViewer() {
   } else if (!workflowStore.backtestResult.success) {
     ElMessage.warning(workflowStore.backtestResult.message || '回测未成功')
   }
+}
+
+function shareWorkflow() {
+  if (workflowStore.nodes.length === 0) {
+    ElMessage.warning('请先构建工作流')
+    return
+  }
+  const url = workflowStore.getShareUrl()
+  navigator.clipboard.writeText(url).then(() => {
+    ElMessage.success('分享链接已复制到剪贴板')
+  }).catch(() => {
+    ElMessage({ type: 'info', message: url, duration: 10000 })
+  })
 }
 </script>

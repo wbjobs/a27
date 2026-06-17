@@ -17,6 +17,25 @@ class FactorWorkflowExecutor:
         self._raw_data: Optional[pd.DataFrame] = None
         self._code_col: Optional[str] = None
         self._date_col: Optional[str] = None
+        self._all_dates: List[Any] = []
+        self._chain_lookback: Dict[str, int] = {}
+
+    def _compute_chain_lookback(self, nodes: List[FactorNode], node_map: Dict[str, FactorNode]) -> Dict[str, int]:
+        lookbacks = {}
+        for node_id in self._topological_sort(nodes):
+            node = node_map[node_id]
+            op = OperatorRegistry.get(node.operator_id)
+            own_lb = op.get_lookback(node.params) if op else 0
+            
+            max_upstream_lb = 0
+            for _, source in node.inputs.items():
+                upstream_id = self._extract_node_deps(source)
+                if upstream_id and upstream_id in lookbacks:
+                    max_upstream_lb = max(max_upstream_lb, lookbacks[upstream_id])
+            
+            lookbacks[node_id] = own_lb + max_upstream_lb
+        
+        return lookbacks
     
     def _load_market_data(
         self,
@@ -261,7 +280,8 @@ class FactorWorkflowExecutor:
         dataset_name: str,
         stock_codes: Optional[List[str]] = None,
         start_date: Optional[Any] = None,
-        end_date: Optional[Any] = None
+        end_date: Optional[Any] = None,
+        forward_validation: bool = False
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         self._node_outputs = {}
         df = self._load_market_data(dataset_name, stock_codes, start_date, end_date)
@@ -276,6 +296,19 @@ class FactorWorkflowExecutor:
         
         execution_order = self._topological_sort(workflow.nodes)
         adj, node_map = self._build_dependency_graph(workflow.nodes)
+        
+        self._chain_lookback = self._compute_chain_lookback(workflow.nodes, node_map)
+        
+        if forward_validation:
+            output_data, fv_info = self._execute_forward_validation(
+                workflow, node_map, execution_order,
+                close_series, open_series, high_series, low_series, volume_series,
+                all_stock_codes, df
+            )
+            factor_records = self._format_factor_output(output_data, df)
+            stats = self._compute_factor_statistics(factor_records)
+            stats["forward_validation"] = fv_info
+            return factor_records, stats
         
         for node_id in execution_order:
             node = node_map[node_id]
@@ -296,6 +329,96 @@ class FactorWorkflowExecutor:
         stats = self._compute_factor_statistics(factor_records)
         
         return factor_records, stats
+
+    def _execute_forward_validation(
+        self,
+        workflow: FactorWorkflow,
+        node_map: Dict[str, FactorNode],
+        execution_order: List[str],
+        close_series: Dict[str, pd.Series],
+        open_series: Dict[str, pd.Series],
+        high_series: Dict[str, pd.Series],
+        low_series: Dict[str, pd.Series],
+        volume_series: Dict[str, pd.Series],
+        stock_codes: List[str],
+        df: pd.DataFrame
+    ) -> Tuple[Dict[str, pd.Series], Dict[str, Any]]:
+        all_dates = sorted(set().union(*(s.index for s in close_series.values())))
+        output_lookback = self._chain_lookback.get(workflow.output_node, 0)
+        warmup_dates = all_dates[:output_lookback] if output_lookback < len(all_dates) else []
+        eval_dates = all_dates[output_lookback:]
+        
+        output_node_data: Dict[str, pd.Series] = {}
+        for code in stock_codes:
+            output_node_data[code] = pd.Series(dtype=float, name=code)
+        
+        total = len(eval_dates)
+        for i, as_of_date in enumerate(eval_dates):
+            if i % 50 == 0:
+                logger.info(f"Forward validation: {i}/{total} as_of_date={as_of_date}")
+            
+            truncated_inputs = self._truncate_series_at_date(
+                close_series, open_series, high_series, low_series, volume_series,
+                as_of_date, stock_codes
+            )
+            
+            self._node_outputs = {}
+            for node_id in execution_order:
+                node = node_map[node_id]
+                inputs = self._resolve_inputs(
+                    node,
+                    truncated_inputs["close"],
+                    truncated_inputs["open"],
+                    truncated_inputs["high"],
+                    truncated_inputs["low"],
+                    truncated_inputs["volume"],
+                    stock_codes
+                )
+                result = self._apply_operator_per_stock(node.operator_id, inputs, node.params)
+                self._node_outputs[node_id] = result
+            
+            output_data = self._node_outputs.get(workflow.output_node, {})
+            for code, series in output_data.items():
+                if code in output_node_data and len(series) > 0:
+                    last_val = series.iloc[-1]
+                    if pd.notna(last_val):
+                        output_node_data[code].at[as_of_date] = last_val
+        
+        fv_info = {
+            "enabled": True,
+            "total_dates": len(all_dates),
+            "warmup_dates": len(warmup_dates),
+            "eval_dates": len(eval_dates),
+            "output_chain_lookback": output_lookback,
+            "warmup_period_end": str(warmup_dates[-1])[:10] if warmup_dates else None,
+            "message": f"前向验证完成: 跳过{len(warmup_dates)}天预热期, 在{len(eval_dates)}个时点验证"
+        }
+        
+        return output_node_data, fv_info
+
+    def _truncate_series_at_date(
+        self,
+        close_series: Dict[str, pd.Series],
+        open_series: Dict[str, pd.Series],
+        high_series: Dict[str, pd.Series],
+        low_series: Dict[str, pd.Series],
+        volume_series: Dict[str, pd.Series],
+        as_of_date: Any,
+        stock_codes: List[str]
+    ) -> Dict[str, Dict[str, pd.Series]]:
+        result = {}
+        for name, series_dict in [
+            ("close", close_series), ("open", open_series),
+            ("high", high_series), ("low", low_series),
+            ("volume", volume_series)
+        ]:
+            truncated = {}
+            for code in stock_codes:
+                if code in series_dict:
+                    s = series_dict[code]
+                    truncated[code] = s[s.index <= as_of_date]
+            result[name] = truncated
+        return result
     
     def _format_factor_output(
         self,
