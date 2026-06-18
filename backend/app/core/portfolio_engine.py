@@ -28,7 +28,7 @@ class PortfolioOptimizer:
 
         for item in factors:
             name = item.get("name", f"factor_{len(factor_dfs)}")
-            values = item.get("values", [])
+            values = item.get("factor_values", item.get("values", []))
             if not values:
                 continue
 

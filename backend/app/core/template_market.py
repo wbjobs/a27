@@ -16,7 +16,7 @@ class TemplateMarket:
 
     def _ensure_table(self):
         try:
-            duckdb_engine.conn.execute("""
+            duckdb_engine._conn.execute("""
                 CREATE TABLE IF NOT EXISTS factor_templates (
                     template_id VARCHAR PRIMARY KEY,
                     name VARCHAR,
@@ -64,7 +64,7 @@ class TemplateMarket:
         backtest_json = json.dumps(backtest_result, ensure_ascii=False, default=str) if backtest_result else None
         tags_json = json.dumps(tags, ensure_ascii=False)
 
-        duckdb_engine.conn.execute("""
+        duckdb_engine._conn.execute("""
             INSERT INTO factor_templates (
                 template_id, name, description, category, tags,
                 author_name, author_avatar, author_profile,
@@ -109,16 +109,22 @@ class TemplateMarket:
             query += f" ORDER BY {sort_by} {order}"
 
         count_query = query.replace("SELECT *", "SELECT COUNT(*)")
-        total = duckdb_engine.conn.execute(count_query, params).fetchone()[0]
+        if "ORDER BY" in count_query:
+            count_query = count_query.split("ORDER BY")[0].strip()
+        try:
+            total = duckdb_engine._conn.execute(count_query, params).fetchone()[0]
+        except Exception as e:
+            logger.warning(f"Count query failed: {e}, using fallback")
+            total = duckdb_engine._conn.execute("SELECT COUNT(*) FROM factor_templates WHERE is_public = ?", [only_public]).fetchone()[0]
 
         query += " LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         try:
-            df = duckdb_engine.conn.execute(query, params).fetchdf()
+            df = duckdb_engine._conn.execute(query, params).fetchdf()
         except Exception as e:
             logger.warning(f"Query failed ({e}), trying simpler approach")
-            all_df = duckdb_engine.conn.execute("SELECT * FROM factor_templates", params).fetchdf()
+            all_df = duckdb_engine._conn.execute("SELECT * FROM factor_templates", params).fetchdf()
             if search:
                 mask = (all_df['name'].str.contains(search, na=False) |
                         all_df['description'].str.contains(search, na=False) |
@@ -179,20 +185,22 @@ class TemplateMarket:
     def get_template(self, template_id: str, increment_views: bool = True) -> Optional[Dict[str, Any]]:
         import json
         try:
-            row = duckdb_engine.conn.execute(
+            df = duckdb_engine._conn.execute(
                 "SELECT * FROM factor_templates WHERE template_id = ?",
                 [template_id]
-            ).fetchone()
+            ).fetchdf()
         except Exception as e:
             logger.error(f"Get template error: {e}")
             return None
 
-        if not row:
+        if df.empty:
             return None
+
+        row = df.iloc[0]
 
         if increment_views:
             try:
-                duckdb_engine.conn.execute(
+                duckdb_engine._conn.execute(
                     "UPDATE factor_templates SET views = views + 1, updated_at = ? WHERE template_id = ?",
                     [time.time(), template_id]
                 )
@@ -247,7 +255,7 @@ class TemplateMarket:
             return None
 
         try:
-            duckdb_engine.conn.execute(
+            duckdb_engine._conn.execute(
                 "UPDATE factor_templates SET forks = forks + 1, updated_at = ? WHERE template_id = ?",
                 [time.time(), template_id]
             )
@@ -271,7 +279,7 @@ class TemplateMarket:
 
     def like_template(self, template_id: str) -> bool:
         try:
-            duckdb_engine.conn.execute(
+            duckdb_engine._conn.execute(
                 "UPDATE factor_templates SET likes = likes + 1, updated_at = ? WHERE template_id = ?",
                 [time.time(), template_id]
             )
@@ -282,7 +290,7 @@ class TemplateMarket:
 
     def delete_template(self, template_id: str) -> bool:
         try:
-            duckdb_engine.conn.execute(
+            duckdb_engine._conn.execute(
                 "DELETE FROM factor_templates WHERE template_id = ?",
                 [template_id]
             )
@@ -293,7 +301,7 @@ class TemplateMarket:
 
     def get_categories(self) -> List[str]:
         try:
-            rows = duckdb_engine.conn.execute(
+            rows = duckdb_engine._conn.execute(
                 "SELECT DISTINCT category FROM factor_templates WHERE is_public = TRUE"
             ).fetchall()
             return [r[0] for r in rows if r[0]]

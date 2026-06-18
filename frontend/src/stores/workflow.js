@@ -19,7 +19,8 @@ export const useWorkflowStore = defineStore('workflow', {
     factorStats: null,
     backtestResult: null,
     datasets: [],
-    isLoading: false
+    isLoading: false,
+    selectedFactorForShap: null
   }),
 
   getters: {
@@ -274,6 +275,47 @@ export const useWorkflowStore = defineStore('workflow', {
       this.rebuildNodeInputs()
     },
 
+    importTemplateWorkflow(workflowData) {
+      const workflow = workflowData.workflow || workflowData
+      if (!workflow.nodes || !Array.isArray(workflow.nodes)) {
+        throw new Error('Invalid workflow data')
+      }
+
+      this.nodes = workflow.nodes.map((n, i) => ({
+        id: n.id || this.generateNodeId(),
+        operator_id: n.operator_id,
+        x: n.x !== undefined ? n.x : 100 + (i % 3) * 280,
+        y: n.y !== undefined ? n.y : 100 + Math.floor(i / 3) * 200,
+        category: this.getOperatorById(n.operator_id)?.category || 'basic',
+        name: this.getOperatorById(n.operator_id)?.name || n.operator_id,
+        params: n.params || {},
+        inputs: {}
+      }))
+
+      this.edges = (workflow.edges || []).map((e, i) => ({
+        id: e.id || `edge_${Date.now()}_${i}`,
+        source: e.source_node || e.source,
+        target: e.target_node || e.target,
+        target_input: e.target_port || e.target_input,
+        source_output: e.source_port || e.source_output || 'result'
+      }))
+
+      this.outputNodeId = workflow.output_node || this.nodes[this.nodes.length - 1]?.id || null
+
+      const maxId = Math.max(...this.nodes.map((n) => {
+        const match = n.id.match(/node_(\d+)/)
+        return match ? parseInt(match[1]) : 0
+      }), 0)
+      this.nextNodeId = maxId + 1
+
+      this.factorResult = null
+      this.factorStats = null
+      this.backtestResult = null
+
+      this.rebuildNodeInputs()
+      this.syncToUrl()
+    },
+
     clearWorkflow() {
       this.nodes = []
       this.edges = []
@@ -393,6 +435,62 @@ export const useWorkflowStore = defineStore('workflow', {
     getShareUrl() {
       this.syncToUrl()
       return window.location.href
+    },
+
+    setSelectedFactorForShap(factorName, factorValues) {
+      this.selectedFactorForShap = {
+        name: factorName,
+        values: factorValues
+      }
+    },
+
+    importTemplateWorkflow(data) {
+      const { workflow, name, description, factor_stats, backtest_result } = data
+
+      this.nodes = []
+      this.edges = []
+      this.selectedNodeId = null
+      this.selectedEdgeId = null
+      this.factorResult = null
+
+      if (workflow) {
+        this.nodes = workflow.nodes.map((n, i) => ({
+          ...n,
+          x: 100 + (i % 3) * 280,
+          y: 100 + Math.floor(i / 3) * 200,
+          category: this.getOperatorById(n.operator_id)?.category || 'basic',
+          name: this.getOperatorById(n.operator_id)?.name || n.operator_id
+        }))
+        this.outputNodeId = workflow.output_node
+        this.edges = (workflow.edges || []).map(ed => ({
+          id: ed.id || `edge_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          source: ed.source_node || ed.source,
+          source_output: ed.source_port || ed.source_output || 'result',
+          target: ed.target_node || ed.target,
+          target_input: ed.target_port || ed.target_input
+        }))
+        this.nextNodeId = Math.max(...workflow.nodes.map((n) => parseInt(n.id.split('_')[1]) || 0), 0) + 1
+        this.rebuildNodeInputs()
+      }
+
+      if (factor_stats) {
+        this.factorStats = factor_stats
+      }
+      if (backtest_result) {
+        this.backtestResult = backtest_result
+      }
+
+      this.syncToUrl()
+    },
+
+    getCurrentWorkflowForPublish() {
+      return {
+        workflow: this.exportWorkflow(),
+        name: this.workflowName,
+        description: '',
+        factorStats: this.factorStats,
+        backtestResult: this.backtestResult
+      }
     }
   }
 })

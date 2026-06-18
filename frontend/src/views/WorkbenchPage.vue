@@ -34,9 +34,10 @@
         </el-upload>
         <el-divider direction="vertical" />
         <el-button :icon="Delete" @click="clearWorkflow">清空</el-button>
-        <el-button type="success" :icon="Play" :loading="isComputing" @click="computeFactor">计算因子</el-button>
+        <el-button type="success" :icon="VideoPlay" :loading="isComputing" @click="computeFactor">计算因子</el-button>
         <el-button type="warning" :icon="Histogram" :loading="isBacktesting" @click="runBacktest" :disabled="!workflowStore.factorResult">一键回测</el-button>
         <el-button :icon="Share" @click="shareWorkflow">分享</el-button>
+        <el-button type="success" :icon="UploadFilled" @click="openPublishDialog">发布模板</el-button>
       </div>
     </div>
 
@@ -79,6 +80,34 @@
 
     <ResultViewer ref="resultViewerRef" />
 
+    <el-dialog v-model="showPublishDialog" title="发布为模板" width="480px">
+      <el-form :model="publishForm" label-position="top">
+        <el-form-item label="模板名称" required>
+          <el-input v-model="publishForm.name" placeholder="输入模板名称" />
+        </el-form-item>
+        <el-form-item label="描述" required>
+          <el-input v-model="publishForm.description" type="textarea" :rows="3" placeholder="描述这个模板的用途和特点" />
+        </el-form-item>
+        <el-form-item label="分类" required>
+          <el-select v-model="publishForm.category" placeholder="选择分类" style="width: 100%;">
+            <el-option
+              v-for="cat in templateCategories"
+              :key="cat"
+              :label="cat"
+              :value="cat"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="作者" required>
+          <el-input v-model="publishForm.author" placeholder="输入作者名称" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showPublishDialog = false">取消</el-button>
+        <el-button type="primary" :loading="isPublishing" @click="handlePublish">发布</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="showSampleDialog" title="生成示例数据" width="480px">
       <el-form label-position="top">
         <el-form-item label="股票数量 (5-500)">
@@ -102,9 +131,10 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { DataLine, MagicStick, Upload, Delete, Play, Histogram, Share } from '@element-plus/icons-vue'
+import { DataLine, MagicStick, Upload, Delete, VideoPlay, Histogram, Share, UploadFilled } from '@element-plus/icons-vue'
 import { useWorkflowStore } from '../stores/workflow'
-import { dataApi, factorApi, backtestApi } from '../api'
+import { useRouter } from 'vue-router'
+import { dataApi, factorApi, backtestApi, templateApi } from '../api'
 import OperatorPalette from '../components/OperatorPalette.vue'
 import WorkflowCanvas from '../components/WorkflowCanvas.vue'
 import NodePropertyPanel from '../components/NodePropertyPanel.vue'
@@ -113,30 +143,42 @@ import FactorResultPanel from '../components/FactorResultPanel.vue'
 import ResultViewer from '../components/ResultViewer.vue'
 
 const workflowStore = useWorkflowStore()
+const router = useRouter()
 const resultViewerRef = ref(null)
 
 const selectedDataset = ref(null)
 const showSampleDialog = ref(false)
+const showPublishDialog = ref(false)
 const isComputing = ref(false)
 const isBacktesting = ref(false)
 const isGenerating = ref(false)
+const isPublishing = ref(false)
 const sampleParams = ref({
   nStocks: 50,
   nDays: 252,
   name: ''
 })
+const publishForm = ref({
+  name: '',
+  description: '',
+  category: '',
+  author: ''
+})
 const forwardValidation = ref(false)
+const templateCategories = ref([])
 
 const isDatasetSelected = computed(() => !!selectedDataset.value)
 
 onMounted(async () => {
   try {
-    const [opRes, dsRes] = await Promise.all([
+    const [opRes, dsRes, catRes] = await Promise.all([
       factorApi.listOperators(),
-      dataApi.listDatasets()
+      dataApi.listDatasets(),
+      templateApi.getCategories().catch(() => [])
     ])
     workflowStore.setOperators(opRes.operators, opRes.by_category)
     workflowStore.setDatasets(Array.isArray(dsRes) ? dsRes : [])
+    templateCategories.value = Array.isArray(catRes) ? catRes : ['技术指标', '基本面', '量价分析', '多因子', '其他']
     
     if (workflowStore.datasets.length > 0) {
       selectedDataset.value = workflowStore.datasets[0].name
@@ -292,5 +334,55 @@ function shareWorkflow() {
   }).catch(() => {
     ElMessage({ type: 'info', message: url, duration: 10000 })
   })
+}
+
+function openPublishDialog() {
+  if (workflowStore.nodes.length === 0) {
+    ElMessage.warning('请先构建工作流')
+    return
+  }
+  publishForm.value = {
+    name: workflowStore.workflowName,
+    description: '',
+    category: templateCategories.value[0] || '',
+    author: ''
+  }
+  showPublishDialog.value = true
+}
+
+async function handlePublish() {
+  if (!publishForm.value.name || !publishForm.value.description || !publishForm.value.category || !publishForm.value.author) {
+    ElMessage.warning('请填写完整信息')
+    return
+  }
+
+  isPublishing.value = true
+  try {
+    const workflowData = workflowStore.getCurrentWorkflowForPublish()
+    const res = await templateApi.publishTemplate({
+      ...workflowData,
+      name: publishForm.value.name,
+      description: publishForm.value.description,
+      category: publishForm.value.category,
+      author: publishForm.value.author
+    })
+    if (res.success) {
+      ElMessage.success('发布成功！')
+      showPublishDialog.value = false
+      ElMessageBox.confirm('模板已发布成功，是否前往模板市场查看？', '提示', {
+        confirmButtonText: '前往查看',
+        cancelButtonText: '留在当前页',
+        type: 'success'
+      }).then(() => {
+        router.push('/templates')
+      }).catch(() => {})
+    } else {
+      ElMessage.error(res.message || '发布失败')
+    }
+  } catch (e) {
+    ElMessage.error('发布失败: ' + e.message)
+  } finally {
+    isPublishing.value = false
+  }
 }
 </script>

@@ -62,7 +62,7 @@
         </el-button>
         <el-button
           type="danger"
-          :icon="VideoStop"
+          :icon="Close"
           @click="handleStop"
           :disabled="!isConnected && !isConnecting"
         >
@@ -241,7 +241,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { VideoPlay, VideoPause, VideoStop, Calendar, TrendCharts, DataLine, Operation } from '@element-plus/icons-vue'
+import { VideoPlay, VideoPause, Close, Calendar, TrendCharts, DataLine, Operation } from '@element-plus/icons-vue'
 import { useWorkflowStore } from '../stores/workflow'
 import { wsApi } from '../api'
 

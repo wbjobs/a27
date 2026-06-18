@@ -39,7 +39,7 @@ class ShapAnalyzer:
 
         df['trade_date'] = pd.to_datetime(df['trade_date'])
 
-        mkt = duckdb_engine.load_table(dataset_name)
+        mkt = duckdb_engine._conn.execute(f"SELECT * FROM {dataset_name}").fetchdf()
         date_col = duckdb_engine._find_date_column(dataset_name)
         code_col = duckdb_engine._find_column(dataset_name, ["ts_code", "code", "symbol", "stock_code"])
         mkt = mkt.copy()
@@ -97,7 +97,7 @@ class ShapAnalyzer:
                 "shap_values": [],
                 "base_value": 0.0,
                 "summary_plot_data": [],
-                "force_plot_data": []
+                "force_plot_data": None
             }
 
         try:
@@ -111,7 +111,7 @@ class ShapAnalyzer:
                     "shap_values": [],
                     "base_value": 0.0,
                     "summary_plot_data": [],
-                    "force_plot_data": []
+                    "force_plot_data": None
                 }
 
             n_estimators = min(100, max(20, len(X) // 5))
@@ -211,7 +211,7 @@ class ShapAnalyzer:
                 "shap_values": [],
                 "base_value": 0.0,
                 "summary_plot_data": [],
-                "force_plot_data": {}
+                "force_plot_data": None
             }
 
     def generate_pdf_report(

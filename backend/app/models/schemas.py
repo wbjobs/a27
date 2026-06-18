@@ -254,7 +254,7 @@ class ShapResult(BaseModel):
     shap_values: List[Dict[str, Any]]
     base_value: float
     summary_plot_data: List[Dict[str, Any]]
-    force_plot_data: List[Dict[str, Any]]
+    force_plot_data: Optional[Dict[str, Any]] = None
 
 
 # ============================================

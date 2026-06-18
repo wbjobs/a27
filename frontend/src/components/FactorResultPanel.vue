@@ -33,6 +33,10 @@
           <el-icon style="margin-right: 4px;"><Histogram /></el-icon>
           一键回测
         </el-button>
+        <el-button type="primary" style="width: 100%;" @click="runShapAnalysis">
+          <el-icon style="margin-right: 4px;"><DataAnalysis /></el-icon>
+          运行 SHAP 分析
+        </el-button>
         <el-button type="primary" plain style="width: 100%;" @click="showResultViewer = true">
           <el-icon style="margin-right: 4px;"><View /></el-icon>
           查看详细结果
@@ -48,12 +52,14 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { Histogram, View, Download } from '@element-plus/icons-vue'
+import { Histogram, View, Download, DataAnalysis } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
 import { useWorkflowStore } from '../stores/workflow'
 import { backtestApi } from '../api'
 
 const workflowStore = useWorkflowStore()
+const router = useRouter()
 
 const stats = computed(() => workflowStore.factorStats)
 const showResultViewer = ref(false)
@@ -101,5 +107,17 @@ function exportCsv() {
   link.download = `factor_result_${Date.now()}.csv`
   link.click()
   ElMessage.success('导出成功')
+}
+
+function runShapAnalysis() {
+  if (!workflowStore.factorResult?.length) {
+    ElMessage.warning('请先计算因子')
+    return
+  }
+  workflowStore.setSelectedFactorForShap(
+    workflowStore.workflowName,
+    workflowStore.factorResult
+  )
+  router.push('/shap')
 }
 </script>
